@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>櫃檯雙區計價程式</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 900px; /* 變寬以容納兩欄 */
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #5a009d;
+            margin-bottom: 20px;
+        }
+        .global-settings {
+            background-color: #eee;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            border: 2px solid #5a009d;
+        }
+        
+        /* 雙欄佈局 */
+        .zones-wrapper {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .zone {
+            flex: 1;
+            min-width: 300px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        .zone-title {
+            text-align: center;
+            font-size: 1.4em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #ccc;
+        }
+        /* 看書區標題色 */
+        .zone-read .zone-title { color: #d35400; border-color: #d35400; }
+        /* 上網區標題色 */
+        .zone-net .zone-title { color: #2980b9; border-color: #2980b9; }
+
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="number"], select {
+            width: 100%; padding: 8px; box-sizing: border-box;
+            border: 1px solid #ccc; border-radius: 4px;
+        }
+
+        /* 包時樣式 */
+        .package-options {
+            padding: 10px;
+            background-color: #fff;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+        .package-options label {
+            font-weight: normal; display: block; margin-bottom: 8px; font-size: 0.95em;
+        }
+        .pkg-input {
+            width: 50px; padding: 4px; margin-left: 5px;
+            font-size: 1em; text-align: center;
+        }
+
+        /* 按鈕與結果 */
+        button {
+            width: 100%; padding: 15px; margin-top: 20px;
+            background-color: #5a009d; color: white;
+            font-size: 18px; font-weight: bold;
+            border: none; border-radius: 4px; cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover { background-color: #4a0080; }
+
+        #results {
+            margin-top: 20px; padding: 20px;
+            background-color: #fdfdfd; border: 2px dashed #5a009d;
+            border-radius: 8px; display: none;
+        }
+        .result-row {
+            display: flex; justify-content: space-between;
+            font-size: 1.1em; margin-bottom: 10px; padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .grand-total {
+            font-size: 2em; font-weight: bold; color: #d90000;
+            text-align: center; margin-top: 15px;
+        }
+        .error-msg { color: red; font-size: 0.9em; margin-top: 5px; }
+        
+        fieldset[disabled] { opacity: 0.5; background-color: #eee; pointer-events: none;}
+
+        /* Grid helper for input rows inside zones */
+        .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>櫃檯雙區計價程式</h1>
+
+        <div class="global-settings">
+            <label for="dayType" style="font-size: 1.2em; display:inline-block; margin-right:10px;">今日時段：</label>
+            <select id="dayType" style="width: auto; display:inline-block; font-size: 1.1em; padding: 5px;">
+                <option value="weekday">平日</option>
+                <option value="weekend">假日</option>
+            </select>
+        </div>
+
+        <div class="zones-wrapper">
+            <div class="zone zone-read">
+                <div class="zone-title">📖 看書區</div>
+                
+                <div class="input-row">
+                    <div class="form-group">
+                        <label>顧客身份</label>
+                        <select id="read_isMember" onchange="togglePackage('read')">
+                            <option value="member">會員</option>
+                            <option value="non-member">非會員</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>人數</label>
+                        <input type="number" id="read_personCount" min="0" value="0"> 
+                        </div>
+                </div>
+
+                <fieldset id="read_pkg_fieldset" class="form-group">
+                    <legend style="font-weight: bold; margin-bottom: 5px;">包時 (會員限定)</legend>
+                    <div class="package-options">
+                        <label>3H: <input type="number" id="read_pkg3" min="0" value="0" class="pkg-input"> 個</label>
+                        <label>6H: <input type="number" id="read_pkg6" min="0" value="0" class="pkg-input"> 個</label>
+                        <label>9H: <input type="number" id="read_pkg9" min="0" value="0" class="pkg-input"> 個</label>
+                    </div>
+                </fieldset>
+
+                <div class="form-group">
+                    <label>總消費分鐘</label>
+                    <input type="number" id="read_minutes" placeholder="輸入分鐘數" min="0">
+                </div>
+                <div id="read_error" class="error-msg"></div>
+            </div>
+
+            <div class="zone zone-net">
+                <div class="zone-title">💻 上網區</div>
+
+                <div class="input-row">
+                    <div class="form-group">
+                        <label>顧客身份</label>
+                        <select id="net_isMember" onchange="togglePackage('net')">
+                            <option value="member">會員</option>
+                            <option value="non-member">非會員</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>人數</label>
+                        <input type="number" id="net_personCount" min="0" value="0">
+                        </div>
+                </div>
+
+                <fieldset id="net_pkg_fieldset" class="form-group">
+                    <legend style="font-weight: bold; margin-bottom: 5px;">包時 (會員限定)</legend>
+                    <div class="package-options">
+                        <label>3H: <input type="number" id="net_pkg3" min="0" value="0" class="pkg-input"> 個</label>
+                        <label>6H: <input type="number" id="net_pkg6" min="0" value="0" class="pkg-input"> 個</label>
+                        <label>9H: <input type="number" id="net_pkg9" min="0" value="0" class="pkg-input"> 個</label>
+                    </div>
+                </fieldset>
+
+                <div class="form-group">
+                    <label>總消費分鐘</label>
+                    <input type="number" id="net_minutes" placeholder="輸入分鐘數" min="0">
+                </div>
+                <div id="net_error" class="error-msg"></div>
+            </div>
+        </div>
+
+        <button id="calculateButton">計算總金額</button>
+
+        <div id="results">
+            <div class="result-row" style="color: #d35400;">
+                <span>看書區小計:</span>
+                <span id="read_display_total">0 元</span>
+            </div>
+            <div class="result-row" style="color: #2980b9;">
+                <span>上網區小計:</span>
+                <span id="net_display_total">0 元</span>
+            </div>
+            <hr>
+            <div class="grand-total">
+                總收款: <span id="grand_total">0</span> 元
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 資料庫 ---
+        const packagePrices = {
+            weekday: {
+                reading: { 3: 210, 6: 360, 9: 450 },
+                internet: { 3: 240, 6: 400, 9: 500 }
+            },
+            weekend: {
+                reading: { 3: 240, 6: 420, 9: 540 },
+                internet: { 3: 270, 6: 470, 9: 600 }
+            }
+        };
+        const perMinuteRates = { reading: 1.66, internet: 1.83 };
+        const minCharges = { reading: 100, internet: 110 };
+
+        // --- 工具函數 ---
+        function roundUpTo5(price) {
+            const floored = Math.floor(price);
+            const rem = floored % 10;
+            if (rem === 0 || rem === 5) return floored;
+            return Math.ceil(floored / 5) * 5;
+        }
+
+        // --- 單一區域計算核心邏輯 ---
+        function calculateZone(type, dayType) {
+            // 取得該區的輸入 ID 前綴 (read 或 net)
+            const prefix = type === 'reading' ? 'read' : 'net';
+            
+            // 取得 DOM 元素值
+            const isMember = document.getElementById(`${prefix}_isMember`).value === 'member';
+            const personCount = parseInt(document.getElementById(`${prefix}_personCount`).value) || 0;
+            const totalMinutes = parseInt(document.getElementById(`${prefix}_minutes`).value) || 0;
+            
+            const pkg3 = parseInt(document.getElementById(`${prefix}_pkg3`).value) || 0;
+            const pkg6 = parseInt(document.getElementById(`${prefix}_pkg6`).value) || 0;
+            const pkg9 = parseInt(document.getElementById(`${prefix}_pkg9`).value) || 0;
+            
+            const errorDiv = document.getElementById(`${prefix}_error`);
+            errorDiv.innerText = ""; // 清空錯誤
+
+            // 如果人數為 0，直接回傳 0
+            if (personCount <= 0) return 0;
+
+            // 準備參數
+            const rate = perMinuteRates[type];
+            const minCharge = minCharges[type];
+            const prices = packagePrices[dayType][type];
+
+            let basePrice = 0;
+            let overagePrice = 0;
+            let packageMinutes = 0;
+            let singleTotal = 0;
+
+            // 邏輯判斷
+            if (!isMember) {
+                // 非會員檢查是否誤填包時
+                if (pkg3 > 0 || pkg6 > 0 || pkg9 > 0) {
+                    errorDiv.innerText = "⚠️ 非會員不可選包時，已忽略包時選項";
+                }
+                const raw = totalMinutes * rate;
+                basePrice = Math.max(raw, minCharge);
+                singleTotal = roundUpTo5(basePrice);
+            } else {
+                // 會員包時計算
+                basePrice += prices[3] * pkg3;
+                packageMinutes += 180 * pkg3;
+                basePrice += prices[6] * pkg6;
+                packageMinutes += 360 * pkg6;
+                basePrice += prices[9] * pkg9;
+                packageMinutes += 540 * pkg9;
+
+                if (packageMinutes > 0) {
+                    // 有包時
+                    const overageMins = Math.max(0, totalMinutes - packageMinutes);
+                    if (overageMins > 0) {
+                        overagePrice = (overageMins * rate) * 0.9; // 超時九折
+                    }
+                    // 包時(固定) + 超時(進位)
+                    singleTotal = basePrice + roundUpTo5(overagePrice);
+                } else {
+                    // 會員純計時 (假設會員打九折)
+                    const raw = totalMinutes * rate;
+                    const beforeDisc = Math.max(raw, minCharge);
+                    singleTotal = roundUpTo5(beforeDisc * 0.9);
+                }
+            }
+
+            return singleTotal * personCount;
+        }
+
+        // --- 主觸發函數 ---
+        function calculateAll() {
+            const dayType = document.getElementById('dayType').value;
+
+            // 分別計算
+            const readTotal = calculateZone('reading', dayType);
+            const netTotal = calculateZone('internet', dayType);
+
+            const grandTotal = readTotal + netTotal;
+
+            // 顯示
+            document.getElementById('results').style.display = 'block';
+            document.getElementById('read_display_total').innerText = readTotal + " 元";
+            document.getElementById('net_display_total').innerText = netTotal + " 元";
+            document.getElementById('grand_total').innerText = grandTotal;
+        }
+
+        // --- 介面互動 ---
+        function togglePackage(prefix) {
+            const isMember = document.getElementById(`${prefix}_isMember`).value === 'member';
+            const fieldset = document.getElementById(`${prefix}_pkg_fieldset`);
+            fieldset.disabled = !isMember;
+            
+            if (!isMember) {
+                document.getElementById(`${prefix}_pkg3`).value = 0;
+                document.getElementById(`${prefix}_pkg6`).value = 0;
+                document.getElementById(`${prefix}_pkg9`).value = 0;
+            }
+        }
+
+        // 綁定按鈕
+        document.getElementById('calculateButton').addEventListener('click', calculateAll);
+        
+        // 初始化狀態 (預設為會員，包時開啟)
+        togglePackage('read');
+        togglePackage('net');
+
+    </script>
+</body>
+</html>
